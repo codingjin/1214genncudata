@@ -1,4 +1,4 @@
-# exp_sketch_dump
+# genncudata
 
 Minimal pipeline for generating and profiling CUDA kernels from TVM sketch descriptions. Transforms TVM auto-scheduler sketches into standalone CUDA kernels, profiles them with NVIDIA Nsight Compute, and generates XGBoost-ready feature datasets.
 
