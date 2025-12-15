@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 All-in-one pipeline script that:
-0. (Optional) Configure GPU for optimal profiling
-1. Generates CUDA kernels from TVM sketch configurations
-2. Builds all kernel configurations
-3. Profiles all kernels with NCU (with optional power cap setting)
-4. Generates dataset.csv from NCU profiling results
+1. Validates GPU setup (persistent mode, power cap, etc.)
+2. Generates CUDA kernels from TVM sketch configurations
+3. Builds all kernel configurations
+4. Profiles all kernels with NCU (with optional power cap setting)
+5. Generates dataset.csv from NCU profiling results
 """
 import subprocess
 import sys
@@ -41,25 +41,135 @@ def run_command(cmd, description, shell=False):
         sys.exit(1)
 
 
-def check_sudo():
-    """Check if script is running with sudo privileges."""
-    return os.geteuid() == 0
+def validate_gpu_setup():
+    """
+    Validate that GPU has been configured correctly using setup_gpu.sh.
+    Checks:
+    1. nvidia-smi is accessible (passwordless)
+    2. Persistent mode is enabled
+    3. For multi-GPU systems, only GPU 0 is enabled
+    4. Power cap is set to a reasonable value
+
+    Returns True if all checks pass, False otherwise.
+    """
+    print("\n" + "="*60)
+    print("Validating GPU Setup")
+    print("="*60)
+
+    errors = []
+    warnings = []
+
+    # Check 1: nvidia-smi is accessible without sudo
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=count', '--format=csv,noheader'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        gpu_count = int(result.stdout.strip())
+        print(f"✓ nvidia-smi accessible (detected {gpu_count} GPU(s))")
+    except subprocess.CalledProcessError:
+        errors.append("nvidia-smi command failed. GPU drivers may not be installed.")
+        return False, errors, warnings
+    except FileNotFoundError:
+        errors.append("nvidia-smi not found. Please install NVIDIA drivers.")
+        return False, errors, warnings
+
+    # Check 2: Persistent mode enabled for GPU 0
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '-i', '0', '--query-gpu=persistence_mode', '--format=csv,noheader'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        persistence_mode = result.stdout.strip()
+        if persistence_mode == "Enabled":
+            print(f"✓ Persistent mode enabled on GPU 0")
+        else:
+            errors.append(f"Persistent mode is NOT enabled on GPU 0 (current: {persistence_mode})")
+    except subprocess.CalledProcessError as e:
+        errors.append(f"Failed to query persistent mode: {e}")
+
+    # Check 3: For multi-GPU, check compute mode
+    if gpu_count > 1:
+        # Check GPU 0 is in Default mode (allows compute)
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '-i', '0', '--query-gpu=compute_mode', '--format=csv,noheader'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            compute_mode_0 = result.stdout.strip()
+            if compute_mode_0 == "Default":
+                print(f"✓ GPU 0 compute mode: {compute_mode_0} (enabled)")
+            else:
+                errors.append(f"GPU 0 compute mode is {compute_mode_0}, should be Default")
+        except subprocess.CalledProcessError as e:
+            warnings.append(f"Failed to query GPU 0 compute mode: {e}")
+
+        # Check other GPUs are disabled
+        for i in range(1, gpu_count):
+            try:
+                result = subprocess.run(
+                    ['nvidia-smi', '-i', str(i), '--query-gpu=compute_mode', '--format=csv,noheader'],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                compute_mode = result.stdout.strip()
+                if compute_mode == "Prohibited":
+                    print(f"✓ GPU {i} compute mode: {compute_mode} (disabled)")
+                else:
+                    warnings.append(f"GPU {i} compute mode is {compute_mode}, should be Prohibited (disabled)")
+            except subprocess.CalledProcessError as e:
+                warnings.append(f"Failed to query GPU {i} compute mode: {e}")
+
+    # Check 4: Power cap is reasonable (at least 70% of max)
+    try:
+        # Get current power limit
+        result = subprocess.run(
+            ['nvidia-smi', '-i', '0', '--query-gpu=power.limit', '--format=csv,noheader,nounits'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        current_power = float(result.stdout.strip())
+
+        # Get max power limit
+        result = subprocess.run(
+            ['nvidia-smi', '-i', '0', '--query-gpu=power.max_limit', '--format=csv,noheader,nounits'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        max_power = float(result.stdout.strip())
+
+        power_percentage = (current_power / max_power) * 100
+
+        print(f"✓ GPU 0 power cap: {current_power:.1f}W / {max_power:.1f}W ({power_percentage:.1f}%)")
+
+        if power_percentage < 70:
+            warnings.append(f"GPU 0 power cap is only {power_percentage:.1f}% of maximum. Consider increasing for better performance.")
+    except subprocess.CalledProcessError as e:
+        warnings.append(f"Failed to query power cap: {e}")
+    except ValueError as e:
+        warnings.append(f"Failed to parse power cap values: {e}")
+
+    return len(errors) == 0, errors, warnings
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run complete pipeline: GPU setup → kernel generation → profiling → dataset creation'
+        description='Run complete pipeline: kernel generation → build → profile → dataset creation'
     )
     parser.add_argument(
         '--log-file', '-f',
         type=str,
         default='allkernels.json',
         help='Path to the sketch JSON file (default: allkernels.json)'
-    )
-    parser.add_argument(
-        '--setup-gpu',
-        action='store_true',
-        help='Run GPU setup before pipeline (requires sudo, configures GPU 0, persistent mode, max power)'
     )
     parser.add_argument(
         '--skip-genkernel',
@@ -82,19 +192,17 @@ def main():
         default=None,
         help='Set GPU 0 power cap for profiling (in watts, or "max" for maximum). Example: --power-cap 300'
     )
+    parser.add_argument(
+        '--skip-gpu-check',
+        action='store_true',
+        help='Skip GPU setup validation (not recommended)'
+    )
 
     args = parser.parse_args()
-
-    # Check sudo requirement for GPU setup
-    if args.setup_gpu and not check_sudo():
-        print("\n✗ ERROR: --setup-gpu requires sudo privileges")
-        print("Please run: sudo python run_pipeline.py --setup-gpu")
-        sys.exit(1)
 
     print("="*60)
     print("TVM Kernel Pipeline - Complete Workflow")
     print("="*60)
-    print(f"GPU setup: {args.setup_gpu}")
     print(f"Sketch file: {args.log_file}")
     print(f"Skip kernel generation: {args.skip_genkernel}")
     print(f"Skip build: {args.skip_build}")
@@ -103,19 +211,32 @@ def main():
         print(f"Power cap: {args.power_cap}W")
     print("="*60)
 
-    # Step 0: GPU Setup (optional)
-    if args.setup_gpu:
-        setup_script = os.path.join(os.path.dirname(__file__), 'setup_gpu.sh')
-        if not os.path.exists(setup_script):
-            print(f"\n✗ ERROR: setup_gpu.sh not found at {setup_script}")
+    # Validate GPU setup
+    if not args.skip_gpu_check:
+        valid, errors, warnings = validate_gpu_setup()
+
+        # Display warnings
+        if warnings:
+            print("\n⚠ WARNINGS:")
+            for warning in warnings:
+                print(f"  - {warning}")
+
+        # Check for errors
+        if not valid:
+            print("\n" + "="*60)
+            print("✗ GPU SETUP VALIDATION FAILED")
+            print("="*60)
+            print("\nERRORS detected:")
+            for error in errors:
+                print(f"  ✗ {error}")
+            print("\nPlease run the GPU setup script first:")
+            print("  sudo ./setup_gpu.sh")
+            print("\nOr skip GPU validation with --skip-gpu-check (not recommended)")
             sys.exit(1)
 
-        run_command(
-            ['bash', setup_script],
-            "Configuring GPU for optimal profiling (passwordless nvidia-smi, single GPU, persistent mode, max power)"
-        )
+        print("\n✓ GPU setup validation passed")
     else:
-        print("\n⊘ Skipping GPU setup (use --setup-gpu to configure)")
+        print("\n⊘ Skipping GPU setup validation (--skip-gpu-check)")
 
     # Step 1: Generate CUDA kernels from TVM sketches
     if not args.skip_genkernel:

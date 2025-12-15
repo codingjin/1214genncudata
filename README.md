@@ -10,12 +10,13 @@ Minimal pipeline for generating and profiling CUDA kernels from TVM sketch descr
 
 ## Quick Start
 
-### One-Line Complete Pipeline (Recommended)
+### Complete Pipeline (Recommended)
 ```bash
-python run_pipeline.py                      # Complete workflow: generate → profile → dataset
+# First time or after reboot: Setup GPU
+sudo ./setup_gpu.sh
 
-# With GPU setup (first-time or after reboot)
-sudo python run_pipeline.py --setup-gpu     # GPU setup + complete workflow
+# Run pipeline (validates GPU setup automatically)
+python run_pipeline.py                      # Complete workflow: generate → build → profile → dataset
 ```
 
 ### Step-by-Step
@@ -29,18 +30,12 @@ python generate_dataset.py                  # 4. Create dataset.csv for XGBoost
 
 **Note**: `build.sh` and `profile.sh` are **auto-generated** by `genkernel.py`.
 
-## GPU Setup (Recommended)
+## GPU Setup (Required for First Run)
 
-For optimal profiling performance, configure your GPU(s) before running the pipeline:
+Configure your GPU(s) before running the pipeline for optimal profiling performance:
 
-**Option 1: Integrated with pipeline (easiest)**
 ```bash
-sudo python run_pipeline.py --setup-gpu     # GPU setup + full pipeline
-```
-
-**Option 2: Standalone script**
-```bash
-sudo ./setup_gpu.sh                         # One-time GPU configuration
+sudo ./setup_gpu.sh                         # Run once per boot
 ```
 
 This setup configures:
@@ -49,7 +44,10 @@ This setup configures:
 - ✓ Enables persistent mode (reduces latency)
 - ✓ Sets power cap to maximum (optimal performance)
 
-**Note**: This is optional but recommended for consistent profiling results. Should be run once per system boot (or add to startup scripts).
+**Important Notes**:
+- Run once per system boot (or add to startup scripts for auto-setup)
+- The pipeline **automatically validates** GPU setup before running
+- If validation fails, you'll see clear error messages telling you to run `setup_gpu.sh`
 
 ## Workflow
 

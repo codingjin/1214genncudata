@@ -4,15 +4,30 @@ This guide shows you exactly how to run the TVM kernel profiling pipeline.
 
 ## Quick Start (Easiest Way)
 
-### First Time Setup + Complete Pipeline
+### First Time: GPU Setup (Run Once)
 
 ```bash
-# One command does everything: GPU setup, generate kernels, build, profile, create dataset
-sudo python run_pipeline.py --setup-gpu
+# Configure GPU for optimal profiling (run once per boot, or add to startup scripts)
+sudo ./setup_gpu.sh
+```
+
+This configures:
+- Passwordless nvidia-smi
+- Enable only GPU 0 (disables other GPUs in multi-GPU systems)
+- Persistent mode for reduced latency
+- Maximum power cap
+
+**Important**: GPU setup persists until reboot. Run once per boot or add to startup scripts.
+
+### Run the Complete Pipeline
+
+```bash
+# Run the full pipeline (validates GPU setup automatically)
+python run_pipeline.py
 ```
 
 This will:
-1. Configure your GPU (passwordless nvidia-smi, enable only GPU 0, persistent mode, max power)
+1. **Validate GPU setup** (persistent mode, power cap, etc.)
 2. Generate CUDA kernels from `allkernels.json`
 3. Build all kernel executables
 4. Profile all kernels with NCU
@@ -26,15 +41,17 @@ This will:
 
 ---
 
-## Normal Workflow (After First Setup)
-
-If you've already run GPU setup once (it persists until reboot), use:
+## Normal Workflow
 
 ```bash
+# 1. Setup GPU (once per boot)
+sudo ./setup_gpu.sh
+
+# 2. Run pipeline (validates GPU setup automatically)
 python run_pipeline.py
 ```
 
-This runs: generate kernels → build → profile → create dataset
+The pipeline automatically validates that GPU has been configured correctly. If validation fails, it will tell you to run `sudo ./setup_gpu.sh`.
 
 ---
 
@@ -132,11 +149,22 @@ python run_pipeline.py --skip-genkernel --skip-build --power-cap 300
 
 ### Scenario 1: "I just want everything to work"
 ```bash
-sudo python run_pipeline.py --setup-gpu
+# First time (or after reboot)
+sudo ./setup_gpu.sh
+python run_pipeline.py
 ```
 
 ### Scenario 2: "I already did GPU setup, just run the pipeline"
 ```bash
+python run_pipeline.py
+```
+
+### Scenario 2b: "GPU validation failed, what do I do?"
+```bash
+# Run GPU setup
+sudo ./setup_gpu.sh
+
+# Try pipeline again
 python run_pipeline.py
 ```
 
@@ -231,16 +259,22 @@ sudo nvidia-smi -pm 0     # Disable persistent mode
 
 **Simplest workflow:**
 ```bash
-sudo python run_pipeline.py --setup-gpu    # First time
-python run_pipeline.py                     # Subsequent runs
+sudo ./setup_gpu.sh        # First time (or after reboot)
+python run_pipeline.py     # Run pipeline (validates GPU automatically)
 ```
 
 **Manual workflow with power testing:**
 ```bash
+sudo ./setup_gpu.sh        # Setup GPU once
 python genkernel.py        # Generate kernels and scripts
 bash build.sh              # Build once
 bash profile.sh 200        # Profile at 200W
 bash profile.sh 250        # Profile at 250W
 bash profile.sh max        # Profile at max power
 python generate_dataset.py # Create dataset
+```
+
+**Skip GPU validation (not recommended):**
+```bash
+python run_pipeline.py --skip-gpu-check
 ```
