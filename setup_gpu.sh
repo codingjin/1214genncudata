@@ -157,7 +157,7 @@ set_max_power_cap() {
 show_gpu_status() {
     print_info "Current GPU Configuration:"
     echo ""
-    nvidia-smi --query-gpu=index,name,persistence_mode,compute_mode,power.limit,power.max_limit --format=table
+    nvidia-smi
     echo ""
 }
 
