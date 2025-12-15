@@ -21,8 +21,6 @@ METRIC_TRANSFORMS = {
     # NEW ONES:
     # total dynamic instructions, scaled to millions
     "Instructions Executed": ("inst(m)", 1_000_000.0),
-    # branch efficiency as 0–1 instead of percent
-    "Branch Efficiency": ("branchefficiency", 100.0),
 }
 
 WANTED_METRICS = list(METRIC_TRANSFORMS.keys())

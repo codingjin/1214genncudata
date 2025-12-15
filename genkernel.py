@@ -188,35 +188,94 @@ for idx, line in enumerate(all_config):
 
     print(f"Generated {output_path}")
 
-# Generate comprehensive run.sh for all configurations
-print(f"\nGenerating run.sh for {len(all_configs_data)} configurations...")
+# Generate build.sh and profile.sh for all configurations
+print(f"\nGenerating build.sh and profile.sh for {len(all_configs_data)} configurations...")
 
-run_script = """#!/bin/bash
-# Auto-generated run script for all sketch configurations
+# Generate build.sh
+build_script = """#!/bin/bash
+# Auto-generated build script for all sketch configurations
 # Total configurations: """ + str(len(all_configs_data)) + """
 
 mkdir -p build
-mkdir -p ncu_results
 
 """
 
-# Add build and NCU profiling for each configuration
 for config in all_configs_data:
-    run_script += f"""
+    build_script += f"""
 echo ""
 echo "======================================"
-echo "Configuration {config['idx']}"
+echo "Building Configuration {config['idx']}"
 echo "Parameters: N={config['N']} H={config['H']} W={config['W']} CO={config['CO']} CI={config['CI']} KH={config['KH']} KW={config['KW']}"
 echo "Grid: {config['grid']}, Block: {config['block']}"
 echo "======================================"
 
-echo "Building configuration {config['idx']}..."
 cd build
 cmake -DCONFIG_IDX={config['idx']} ..
 make -j
 cd ..
 
-echo "Profiling configuration {config['idx']}..."
+"""
+
+build_script += """
+echo ""
+echo "======================================"
+echo "All builds completed!"
+echo "Executables: ./build/kernel_*"
+echo "======================================"
+"""
+
+with open("build.sh", "w") as f:
+    f.write(build_script)
+
+os.chmod("build.sh", 0o755)
+
+# Generate profile.sh
+profile_script = """#!/bin/bash
+# Auto-generated profiling script for all sketch configurations
+# Total configurations: """ + str(len(all_configs_data)) + """
+#
+# Usage: bash profile.sh [power_cap_watts]
+#   power_cap_watts: Optional. If provided, sets GPU 0 power cap before profiling
+#
+# Examples:
+#   bash profile.sh           # Profile with current power settings
+#   bash profile.sh 300       # Set GPU 0 to 300W and profile
+#   bash profile.sh max       # Set GPU 0 to maximum power and profile
+
+mkdir -p ncu_results
+
+# Handle power cap setting if provided
+if [ ! -z "$1" ]; then
+    if [ "$1" == "max" ]; then
+        echo "Setting GPU 0 power cap to maximum..."
+        MAX_POWER=$(nvidia-smi -i 0 --query-gpu=power.max_limit --format=csv,noheader,nounits | awk '{print int($1)}')
+        sudo nvidia-smi -i 0 -pl $MAX_POWER
+        echo "GPU 0 power cap set to ${MAX_POWER}W"
+    else
+        echo "Setting GPU 0 power cap to $1W..."
+        sudo nvidia-smi -i 0 -pl $1
+        echo "GPU 0 power cap set to $1W"
+    fi
+    echo ""
+fi
+
+"""
+
+for config in all_configs_data:
+    profile_script += f"""
+echo ""
+echo "======================================"
+echo "Profiling Configuration {config['idx']}"
+echo "Parameters: N={config['N']} H={config['H']} W={config['W']} CO={config['CO']} CI={config['CI']} KH={config['KH']} KW={config['KW']}"
+echo "Grid: {config['grid']}, Block: {config['block']}"
+echo "======================================"
+
+# Check if executable exists
+if [ ! -f "./build/kernel_{config['idx']}" ]; then
+    echo "ERROR: ./build/kernel_{config['idx']} not found. Please run build.sh first."
+    exit 1
+fi
+
 ncu --target-processes all \\
     --set full \\
     --print-details all \\
@@ -227,7 +286,7 @@ ncu --target-processes all \\
 
 """
 
-run_script += """
+profile_script += """
 echo ""
 echo "======================================"
 echo "All profiling completed!"
@@ -235,15 +294,23 @@ echo "Results saved to ncu_results/ncu_config_*.csv"
 echo "======================================"
 """
 
-with open("run.sh", "w") as f:
-    f.write(run_script)
+with open("profile.sh", "w") as f:
+    f.write(profile_script)
 
-os.chmod("run.sh", 0o755)
+os.chmod("profile.sh", 0o755)
 
-print(f"\nGenerated run.sh with {len(all_configs_data)} configurations")
+print(f"\nGenerated build.sh and profile.sh with {len(all_configs_data)} configurations")
 print(f"\nGenerated files in kernel/ directory:")
 for config in all_configs_data:
     print(f"  - kernel/kernel{config['idx']}.cuh")
     print(f"  - kernel/kernel{config['idx']}.cu")
-print(f"\n  - run.sh (builds and profiles all configurations)")
-print(f"\nTo profile all configurations, run: bash run.sh")
+print(f"\nGenerated scripts:")
+print(f"  - build.sh (builds all configurations)")
+print(f"  - profile.sh (profiles all configurations)")
+print(f"\nUsage:")
+print(f"  1. Build all: bash build.sh")
+print(f"  2. Profile: bash profile.sh [power_cap_watts]")
+print(f"     Examples:")
+print(f"       bash profile.sh           # Profile with current power settings")
+print(f"       bash profile.sh 300       # Profile at 300W")
+print(f"       bash profile.sh max       # Profile at maximum power")

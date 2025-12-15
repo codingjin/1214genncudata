@@ -29,8 +29,7 @@ FEATURE_COLUMNS = [
     "global_store(m)",
     "shm_load(m)",
     "shm_store(m)",
-    "inst(m)",
-    "branchefficiency"
+    "inst(m)"
 ]
 
 
