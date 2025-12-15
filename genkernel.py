@@ -234,64 +234,116 @@ profile_script = """#!/bin/bash
 # Auto-generated profiling script for all sketch configurations
 # Total configurations: """ + str(len(all_configs_data)) + """
 #
-# Usage: bash profile.sh [power_cap_watts]
-#   power_cap_watts: Optional. If provided, sets GPU 0 power cap before profiling
-#
-# Examples:
-#   bash profile.sh           # Profile with current power settings
-#   bash profile.sh 300       # Set GPU 0 to 300W and profile
-#   bash profile.sh max       # Set GPU 0 to maximum power and profile
+# This script auto-detects GPU type and profiles at 5 different power cap settings
+# Results are organized in ncu_results/powercap1/ through ncu_results/powercap5/
 
-mkdir -p ncu_results
+set -e  # Exit on error
 
-# Handle power cap setting if provided
-if [ ! -z "$1" ]; then
-    if [ "$1" == "max" ]; then
-        echo "Setting GPU 0 power cap to maximum..."
-        MAX_POWER=$(nvidia-smi -i 0 --query-gpu=power.max_limit --format=csv,noheader,nounits | awk '{print int($1)}')
-        sudo nvidia-smi -i 0 -pl $MAX_POWER
-        echo "GPU 0 power cap set to ${MAX_POWER}W"
-    else
-        echo "Setting GPU 0 power cap to $1W..."
-        sudo nvidia-smi -i 0 -pl $1
-        echo "GPU 0 power cap set to $1W"
-    fi
-    echo ""
+echo "======================================"
+echo "GPU Auto-Detection and Power Cap Setup"
+echo "======================================"
+
+# Detect GPU model
+GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader -i 0)
+echo "Detected GPU: $GPU_NAME"
+
+# Select power cap array based on GPU model
+if [[ "$GPU_NAME" == *"RTX 3090"* ]]; then
+    POWER_CAPS=(100 200 300 420 450)
+    echo "GPU Type: RTX 3090"
+elif [[ "$GPU_NAME" == *"RTX 4090"* ]]; then
+    POWER_CAPS=(150 200 300 400 450)
+    echo "GPU Type: RTX 4090"
+elif [[ "$GPU_NAME" == *"A30"* ]]; then
+    POWER_CAPS=(100 120 140 160 165)
+    echo "GPU Type: A30"
+elif [[ "$GPU_NAME" == *"V100"* ]]; then
+    POWER_CAPS=(100 150 200 250 300)
+    echo "GPU Type: V100"
+elif [[ "$GPU_NAME" == *"A100"* ]]; then
+    POWER_CAPS=(100 200 250 300 400)
+    echo "GPU Type: A100"
+else
+    echo "ERROR: Unknown GPU model: $GPU_NAME"
+    echo "Supported GPUs: RTX 3090, RTX 4090, A30, V100, A100"
+    exit 1
 fi
 
+echo "Power cap settings: ${POWER_CAPS[@]} W"
+echo ""
+
+# Create base ncu_results directory
+mkdir -p ncu_results
+
+# Loop through all 5 power cap settings
+for PC_IDX in {1..5}; do
+    POWER_CAP=${POWER_CAPS[$((PC_IDX-1))]}
+    OUTPUT_DIR="ncu_results/powercap${PC_IDX}"
+
+    echo ""
+    echo "======================================"
+    echo "Power Cap ${PC_IDX}/5: ${POWER_CAP}W"
+    echo "======================================"
+
+    # Create output directory
+    mkdir -p "$OUTPUT_DIR"
+
+    # Set power cap
+    echo "Setting GPU 0 power cap to ${POWER_CAP}W..."
+    sudo nvidia-smi -i 0 -pl $POWER_CAP
+    sleep 1  # Brief delay for power cap to take effect
+
+    # Verify power cap was set
+    ACTUAL_POWER=$(nvidia-smi -i 0 --query-gpu=power.limit --format=csv,noheader,nounits | awk '{print int($1)}')
+    echo "GPU 0 power cap confirmed: ${ACTUAL_POWER}W"
+    echo ""
+"""
+
+# Add profiling loop for each power cap
+profile_script += """
+    # Profile all configurations at this power cap
 """
 
 for config in all_configs_data:
     profile_script += f"""
-echo ""
-echo "======================================"
-echo "Profiling Configuration {config['idx']}"
-echo "Parameters: N={config['N']} H={config['H']} W={config['W']} CO={config['CO']} CI={config['CI']} KH={config['KH']} KW={config['KW']}"
-echo "Grid: {config['grid']}, Block: {config['block']}"
-echo "======================================"
+    echo "Profiling config {config['idx']} at ${{POWER_CAP}}W..."
 
-# Check if executable exists
-if [ ! -f "./build/kernel_{config['idx']}" ]; then
-    echo "ERROR: ./build/kernel_{config['idx']} not found. Please run build.sh first."
-    exit 1
-fi
+    # Check if executable exists
+    if [ ! -f "./build/kernel_{config['idx']}" ]; then
+        echo "ERROR: ./build/kernel_{config['idx']} not found. Please run build.sh first."
+        exit 1
+    fi
 
-ncu --target-processes all \\
-    --set full \\
-    --print-details all \\
-    --csv \\
-    --log-file ncu_results/ncu_config_{config['idx']}.csv \\
-    ./build/kernel_{config['idx']} \\
-    {config['N']} {config['H']} {config['W']} {config['CO']} {config['CI']} {config['KH']} {config['KW']} {config['strides'][0]} {config['padding'][0]}
+    ncu --target-processes all \\
+        --set full \\
+        --print-details all \\
+        --csv \\
+        --log-file "$OUTPUT_DIR/ncu_config_{config['idx']}.csv" \\
+        ./build/kernel_{config['idx']} \\
+        {config['N']} {config['H']} {config['W']} {config['CO']} {config['CI']} {config['KH']} {config['KW']} {config['strides'][0]} {config['padding'][0]}
 
 """
 
 profile_script += """
+    echo ""
+    echo "Completed profiling at ${POWER_CAP}W"
+    echo "Results saved to: $OUTPUT_DIR/"
+    echo ""
+done
+
 echo ""
 echo "======================================"
 echo "All profiling completed!"
-echo "Results saved to ncu_results/ncu_config_*.csv"
 echo "======================================"
+echo "Total configurations: """ + str(len(all_configs_data)) + """"
+echo "Total power cap settings: 5"
+echo "Total profiling runs: """ + str(len(all_configs_data) * 5) + """"
+echo ""
+echo "Results organized in:"
+for PC_IDX in {1..5}; do
+    echo "  - ncu_results/powercap${PC_IDX}/ (${POWER_CAPS[$((PC_IDX-1))]}W)"
+done
+echo ""
 """
 
 with open("profile.sh", "w") as f:
@@ -306,11 +358,11 @@ for config in all_configs_data:
     print(f"  - kernel/kernel{config['idx']}.cu")
 print(f"\nGenerated scripts:")
 print(f"  - build.sh (builds all configurations)")
-print(f"  - profile.sh (profiles all configurations)")
+print(f"  - profile.sh (auto-detects GPU and profiles at 5 power caps)")
 print(f"\nUsage:")
 print(f"  1. Build all: bash build.sh")
-print(f"  2. Profile: bash profile.sh [power_cap_watts]")
-print(f"     Examples:")
-print(f"       bash profile.sh           # Profile with current power settings")
-print(f"       bash profile.sh 300       # Profile at 300W")
-print(f"       bash profile.sh max       # Profile at maximum power")
+print(f"  2. Profile at all power caps: bash profile.sh")
+print(f"     - Auto-detects GPU type (RTX 3090/4090, A30, V100, A100)")
+print(f"     - Profiles at 5 power cap settings per GPU")
+print(f"     - Results saved to ncu_results/powercap1/ through powercap5/")
+print(f"  3. Generate dataset: python generate_dataset.py")

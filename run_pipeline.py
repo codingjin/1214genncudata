@@ -4,7 +4,7 @@ All-in-one pipeline script that:
 1. Validates GPU setup (persistent mode, power cap, etc.)
 2. Generates CUDA kernels from TVM sketch configurations
 3. Builds all kernel configurations
-4. Profiles all kernels with NCU (with optional power cap setting)
+4. Profiles all kernels with NCU at 5 different power caps (auto-detected based on GPU type)
 5. Generates dataset.csv from NCU profiling results
 """
 import subprocess
@@ -184,13 +184,7 @@ def main():
     parser.add_argument(
         '--skip-profiling',
         action='store_true',
-        help='Skip profiling step (use existing ncu_results/ files)'
-    )
-    parser.add_argument(
-        '--power-cap',
-        type=str,
-        default=None,
-        help='Set GPU 0 power cap for profiling (in watts, or "max" for maximum). Example: --power-cap 300'
+        help='Skip profiling step (use existing ncu_results/powercap*/ files)'
     )
     parser.add_argument(
         '--skip-gpu-check',
@@ -207,8 +201,7 @@ def main():
     print(f"Skip kernel generation: {args.skip_genkernel}")
     print(f"Skip build: {args.skip_build}")
     print(f"Skip profiling: {args.skip_profiling}")
-    if args.power_cap:
-        print(f"Power cap: {args.power_cap}W")
+    print("Profiling mode: Auto-detect GPU and profile at 5 power caps")
     print("="*60)
 
     # Validate GPU setup
@@ -262,22 +255,18 @@ def main():
     else:
         print("\n⊘ Skipping build (--skip-build)")
 
-    # Step 3: Profile all kernels with NCU
+    # Step 3: Profile all kernels with NCU at 5 power caps
     if not args.skip_profiling:
         if not os.path.exists('profile.sh'):
             print("\n✗ ERROR: profile.sh not found!")
             print("Please run genkernel.py first to generate profile.sh")
             sys.exit(1)
 
-        # Build profiling command with optional power cap
-        if args.power_cap:
-            profile_cmd = f'bash profile.sh {args.power_cap}'
-            description = f"Profiling all kernels with NCU (power cap: {args.power_cap}W)"
-        else:
-            profile_cmd = 'bash profile.sh'
-            description = "Profiling all kernels with NCU"
-
-        run_command(profile_cmd, description, shell=True)
+        run_command(
+            'bash profile.sh',
+            "Profiling all kernels at 5 power caps (auto-detected GPU type)",
+            shell=True
+        )
     else:
         print("\n⊘ Skipping profiling (--skip-profiling)")
 
@@ -295,14 +284,16 @@ def main():
     print("  - kernel/kernel*.cuh (CUDA kernel headers)")
     print("  - kernel/kernel*.cu (CUDA kernel wrappers)")
     print("  - build.sh (build script)")
-    print("  - profile.sh (profiling script with power cap support)")
+    print("  - profile.sh (auto-detects GPU and profiles at 5 power caps)")
     print("  - build/kernel_* (compiled executables)")
-    print("  - ncu_results/ncu_config_*.csv (NCU profiling results)")
-    print("  - dataset.csv (XGBoost-ready feature dataset)")
+    print("  - ncu_results/powercap1-5/ncu_config_*.csv (NCU profiling results)")
+    print("  - dataset.csv (XGBoost-ready feature dataset with GPU and power cap info)")
     print(f"\nDataset is ready for training at: {os.path.abspath('dataset.csv')}")
-    print(f"\nTo re-profile with different power settings:")
-    print(f"  bash profile.sh 250    # Profile at 250W")
-    print(f"  bash profile.sh max    # Profile at maximum power")
+    print(f"\nDataset includes:")
+    print(f"  - All kernel configurations × 5 power cap settings")
+    print(f"  - GPU type identifier (RTX3090/RTX4090/V100/A30/A100)")
+    print(f"  - Power cap wattage for each measurement")
+    print(f"  - 16 performance/hardware features")
 
 
 if __name__ == "__main__":

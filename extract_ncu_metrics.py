@@ -21,6 +21,13 @@ METRIC_TRANSFORMS = {
     # NEW ONES:
     # total dynamic instructions, scaled to millions
     "Instructions Executed": ("inst(m)", 1_000_000.0),
+
+    # Branch efficiency: percent -> 0-1 range
+    "Branch Efficiency": ("branchefficiency", 100.0),
+
+    # Frequency metrics: Hz -> GHz
+    "SM Frequency": ("sm_freq(ghz)", 1_000_000_000.0),
+    "DRAM Frequency": ("mem_freq(ghz)", 1_000_000_000.0),
 }
 
 WANTED_METRICS = list(METRIC_TRANSFORMS.keys())
