@@ -8,9 +8,9 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         # User-specified architecture
         set(CMAKE_CUDA_ARCHITECTURES ${CUDA_ARCH})
     else()
-        # Auto-detect: Use nvidia-smi to query GPU compute capability
+        # Auto-detect: Use nvidia-smi to query GPU 0 compute capability
         execute_process(
-            COMMAND nvidia-smi --query-gpu=compute_cap --format=csv,noheader
+            COMMAND nvidia-smi -i 0 --query-gpu=compute_cap --format=csv,noheader
             OUTPUT_VARIABLE GPU_ARCH
             OUTPUT_STRIP_TRAILING_WHITESPACE
             ERROR_QUIET
