@@ -117,6 +117,36 @@ enable_persistent_mode() {
     fi
 }
 
+# Enable NCU profiling permissions
+enable_profiling_permissions() {
+    print_info "Enabling NCU (Nsight Compute) profiling permissions..."
+
+    # Check if the parameter file exists
+    if [ -f /proc/driver/nvidia/params/NVreg_RestrictProfilingToAdminUsers ]; then
+        echo 0 > /proc/driver/nvidia/params/NVreg_RestrictProfilingToAdminUsers
+        print_success "NCU profiling enabled for non-root users"
+    else
+        # Try alternative method - reload nvidia module with parameter
+        print_warning "Parameter file not found, attempting to reload nvidia module..."
+
+        # Check if module is loaded
+        if lsmod | grep -q nvidia; then
+            modprobe -r nvidia_uvm nvidia_drm nvidia_modeset nvidia || true
+            modprobe nvidia NVreg_RestrictProfilingToAdminUsers=0
+
+            if [ $? -eq 0 ]; then
+                print_success "NVIDIA module reloaded with profiling permissions enabled"
+            else
+                print_warning "Could not reload nvidia module. NCU may require sudo to run."
+                print_info "To fix manually, add to /etc/modprobe.d/nvidia.conf:"
+                print_info "  options nvidia NVreg_RestrictProfilingToAdminUsers=0"
+            fi
+        else
+            print_warning "NVIDIA module not loaded"
+        fi
+    fi
+}
+
 # Set power cap to maximum
 set_max_power_cap() {
     print_info "Setting power cap to maximum..."
@@ -187,6 +217,9 @@ main() {
     enable_persistent_mode
     echo ""
 
+    enable_profiling_permissions
+    echo ""
+
     set_max_power_cap
     echo ""
 
@@ -200,6 +233,7 @@ main() {
     echo "  ✓ GPU 0 enabled as primary GPU"
     echo "  ✓ Other GPUs (if any) disabled for compute"
     echo "  ✓ Persistent mode enabled"
+    echo "  ✓ NCU profiling permissions enabled for non-root users"
     echo "  ✓ Power cap set to maximum for GPU 0"
     echo ""
     print_warning "To restore all GPUs to default state, run:"
