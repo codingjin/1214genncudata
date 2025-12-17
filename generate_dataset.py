@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Generate dataset.csv from all NCU profiling results in ncu_results/ folder.
-Scans all powercap subdirectories (powercap1-5) and includes power cap information.
+Generate dataset_feature.csv from all NCU profiling results in ncu_results/ folder.
+Scans all powercap subdirectories (powercap1-3 for A30, powercap1-5 for other GPUs).
+Includes power cap information with automatic GPU detection.
 Uses the metric extraction logic from extract_ncu_metrics.py.
 """
 import os
@@ -12,16 +13,17 @@ from pathlib import Path
 from extract_ncu_metrics import extract_and_transform_metrics
 
 # Output CSV file
-OUTPUT_FILE = "dataset.csv"
+OUTPUT_FILE = "dataset_feature.csv"
 
 # NCU results directory
 NCU_RESULTS_DIR = "ncu_results"
 
 # Power cap settings for different GPU types
+# Note: A30 has 3 settings, others have 5 settings
 POWER_CAP_CONFIGS = {
-    "RTX 3090": [100, 200, 300, 420, 450],
+    "RTX 3090": [100, 200, 300, 400, 450],
     "RTX 4090": [150, 200, 300, 400, 450],
-    "A30": [100, 120, 140, 160, 165],
+    "A30": [100, 130, 165],
     "V100": [100, 150, 200, 250, 300],
     "A100": [100, 200, 250, 300, 400],
 }
@@ -41,7 +43,6 @@ FEATURE_COLUMNS = [
     "shm_load(m)",
     "shm_store(m)",
     "inst(m)",
-    "branchefficiency",
     "sm_freq(ghz)",
     "mem_freq(ghz)"
 ]
@@ -87,7 +88,8 @@ def extract_config_id(filename):
 def extract_powercap_idx(dirname):
     """
     Extract the power cap index from directory name like 'powercap1'
-    Returns the index as an integer (1-5), or None if pattern doesn't match.
+    Returns the index as an integer (1-based index), or None if pattern doesn't match.
+    Note: A30 has indices 1-3, other GPUs have indices 1-5.
     """
     match = re.search(r'powercap(\d+)', dirname)
     if match:
@@ -133,7 +135,7 @@ def collect_ncu_files(directory):
 
 def generate_dataset(output_file=OUTPUT_FILE, ncu_dir=NCU_RESULTS_DIR):
     """
-    Generate dataset.csv from all NCU CSV files in powercap subdirectories.
+    Generate dataset_feature.csv from all NCU CSV files in powercap subdirectories.
     Includes power cap index and wattage for each configuration.
     """
     # Detect GPU type to get power cap values
@@ -166,15 +168,22 @@ def generate_dataset(output_file=OUTPUT_FILE, ncu_dir=NCU_RESULTS_DIR):
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f)
 
-        # Write header: [id, powercap_watts, GPU, features...]
-        header = ["id", "powercap_watts", "GPU"] + FEATURE_COLUMNS
+        # Write header: [id, GPU, powercap(w), features...]
+        header = ["id", "GPU", "powercap(w)"] + FEATURE_COLUMNS
         writer.writerow(header)
 
         # Process each NCU file with sequential ID
         sequential_id = 0
         for config_idx, powercap_idx, filepath in ncu_files:
-            # Get actual power cap wattage
-            powercap_watts = power_caps[powercap_idx - 1] if gpu_type else None
+            # Get actual power cap wattage with bounds checking
+            # (A30 has 3 settings, other GPUs have 5 settings)
+            if gpu_type and powercap_idx - 1 < len(power_caps):
+                powercap_watts = power_caps[powercap_idx - 1]
+            else:
+                powercap_watts = None
+                if gpu_type:
+                    print(f"Warning: powercap index {powercap_idx} out of range for {gpu_type} "
+                          f"(only {len(power_caps)} power cap settings configured)")
 
             print(f"Processing: powercap{powercap_idx}/ncu_config_{config_idx}.csv "
                   f"(id={sequential_id}, config={config_idx}, GPU={gpu_name}, powercap={powercap_watts}W)")
@@ -182,8 +191,8 @@ def generate_dataset(output_file=OUTPUT_FILE, ncu_dir=NCU_RESULTS_DIR):
             # Extract metrics
             metrics = extract_and_transform_metrics(filepath)
 
-            # Build row: [sequential_id, powercap_watts, GPU, feature1, feature2, ...]
-            row = [sequential_id, powercap_watts, gpu_name]
+            # Build row: [sequential_id, GPU, powercap_watts, feature1, feature2, ...]
+            row = [sequential_id, gpu_name, powercap_watts]
             for feature_name in FEATURE_COLUMNS:
                 value = metrics.get(feature_name)
                 row.append(value)
@@ -196,7 +205,7 @@ def generate_dataset(output_file=OUTPUT_FILE, ncu_dir=NCU_RESULTS_DIR):
 
     print(f"\nDataset generated: {output_file}")
     print(f"Total rows: {len(ncu_files)} (+ 1 header)")
-    print(f"Columns: id, powercap_watts, GPU, {len(FEATURE_COLUMNS)} features")
+    print(f"Columns: id, GPU, powercap(w), {len(FEATURE_COLUMNS)} features")
 
 
 def main():

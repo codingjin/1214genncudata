@@ -5,7 +5,7 @@ All-in-one pipeline script that:
 2. Generates CUDA kernels from TVM sketch configurations
 3. Builds all kernel configurations
 4. Profiles all kernels with NCU at 5 different power caps (auto-detected based on GPU type)
-5. Generates dataset.csv from NCU profiling results
+5. Generates dataset_feature.csv from NCU profiling results
 """
 import subprocess
 import sys
@@ -270,10 +270,10 @@ def main():
     else:
         print("\n⊘ Skipping profiling (--skip-profiling)")
 
-    # Step 4: Generate dataset.csv from NCU results
+    # Step 4: Generate dataset_feature.csv from NCU results
     run_command(
         ['python', 'generate_dataset.py'],
-        "Generating dataset.csv from NCU results"
+        "Generating dataset_feature.csv from NCU results"
     )
 
     # Final summary
@@ -287,8 +287,8 @@ def main():
     print("  - profile.sh (auto-detects GPU and profiles at 5 power caps)")
     print("  - build/kernel_* (compiled executables)")
     print("  - ncu_results/powercap1-5/ncu_config_*.csv (NCU profiling results)")
-    print("  - dataset.csv (XGBoost-ready feature dataset with GPU and power cap info)")
-    print(f"\nDataset is ready for training at: {os.path.abspath('dataset.csv')}")
+    print("  - dataset_feature.csv (XGBoost-ready feature dataset with GPU and power cap info)")
+    print(f"\nDataset is ready for training at: {os.path.abspath('dataset_feature.csv')}")
     print(f"\nDataset includes:")
     print(f"  - All kernel configurations × 5 power cap settings")
     print(f"  - GPU type identifier (RTX3090/RTX4090/V100/A30/A100)")

@@ -25,7 +25,7 @@ python genkernel.py                         # 1. Generate kernels + build.sh + p
 bash build.sh                               # 2. Build all configurations
 bash profile.sh                             # 3. Profile (uses current GPU power setting)
 bash profile.sh 250                         # 3. OR profile at 250W
-python generate_dataset.py                  # 4. Create dataset.csv for XGBoost
+python generate_dataset.py                  # 4. Create dataset_feature.csv for XGBoost
 ```
 
 **Note**: `build.sh` and `profile.sh` are **auto-generated** by `genkernel.py`.
@@ -57,7 +57,7 @@ This setup configures:
 4. **Profiling**: `profile.sh` (auto-generated) profiles with NCU → `ncu_results/*.csv`
    - No argument: uses current GPU power setting
    - With argument: sets GPU 0 power cap (e.g., `bash profile.sh 250` or `bash profile.sh max`)
-5. **Dataset**: `generate_dataset.py` extracts 13 metrics → `dataset.csv`
+5. **Dataset**: `generate_dataset.py` extracts 15 features → `dataset_feature.csv`
 
 ## Essential Files
 
@@ -75,7 +75,7 @@ This setup configures:
 - `build.sh`: **Auto-generated** build script (created by genkernel.py)
 - `profile.sh`: **Auto-generated** profiling script with power cap support (created by genkernel.py)
 - `ncu_results/`: NCU profiling results (created by profile.sh)
-- `dataset.csv`: XGBoost-ready features (created by generate_dataset.py)
+- `dataset_feature.csv`: XGBoost-ready features (created by generate_dataset.py)
 
 ## Advanced Usage
 
@@ -151,7 +151,7 @@ cmake -DCONFIG_IDX=0 -DCUDA_ARCH=86 ..
 
 ## Dataset Features
 
-The generated `dataset.csv` contains 13 normalized metrics:
+The generated `dataset_feature.csv` contains 15 normalized features:
 - `blocksize(k)`, `threads(k)`, `reg_thread(k)`: Thread configuration
 - `shm_block(mb)`: Shared memory usage
 - `occupancy`, `mem`, `compute`: Utilization metrics (0-1 range)

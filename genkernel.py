@@ -234,8 +234,10 @@ profile_script = """#!/bin/bash
 # Auto-generated profiling script for all sketch configurations
 # Total configurations: """ + str(len(all_configs_data)) + """
 #
-# This script auto-detects GPU type and profiles at 5 different power cap settings
-# Results are organized in ncu_results/powercap1/ through ncu_results/powercap5/
+# This script auto-detects GPU type and profiles at different power cap settings:
+#   - A30: 3 power cap settings (powercap1-3)
+#   - Other GPUs: 5 power cap settings (powercap1-5)
+# Results are organized in ncu_results/powercap1/ through ncu_results/powercapN/
 
 set -e  # Exit on error
 
@@ -248,14 +250,15 @@ GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader -i 0)
 echo "Detected GPU: $GPU_NAME"
 
 # Select power cap array based on GPU model
+# Note: A30 has 3 settings, other GPUs have 5 settings
 if [[ "$GPU_NAME" == *"RTX 3090"* ]]; then
-    POWER_CAPS=(100 200 300 420 450)
+    POWER_CAPS=(100 200 300 400 450)
     echo "GPU Type: RTX 3090"
 elif [[ "$GPU_NAME" == *"RTX 4090"* ]]; then
     POWER_CAPS=(150 200 300 400 450)
     echo "GPU Type: RTX 4090"
 elif [[ "$GPU_NAME" == *"A30"* ]]; then
-    POWER_CAPS=(100 120 140 160 165)
+    POWER_CAPS=(100 130 165)
     echo "GPU Type: A30"
 elif [[ "$GPU_NAME" == *"V100"* ]]; then
     POWER_CAPS=(100 150 200 250 300)
@@ -275,14 +278,17 @@ echo ""
 # Create base ncu_results directory
 mkdir -p ncu_results
 
-# Loop through all 5 power cap settings
-for PC_IDX in {1..5}; do
+# Get number of power cap settings (3 for A30, 5 for others)
+NUM_POWER_CAPS=${#POWER_CAPS[@]}
+
+# Loop through all power cap settings dynamically
+for PC_IDX in $(seq 1 $NUM_POWER_CAPS); do
     POWER_CAP=${POWER_CAPS[$((PC_IDX-1))]}
     OUTPUT_DIR="ncu_results/powercap${PC_IDX}"
 
     echo ""
     echo "======================================"
-    echo "Power Cap ${PC_IDX}/5: ${POWER_CAP}W"
+    echo "Power Cap ${PC_IDX}/${NUM_POWER_CAPS}: ${POWER_CAP}W"
     echo "======================================"
 
     # Create output directory
@@ -336,11 +342,11 @@ echo "======================================"
 echo "All profiling completed!"
 echo "======================================"
 echo "Total configurations: """ + str(len(all_configs_data)) + """"
-echo "Total power cap settings: 5"
-echo "Total profiling runs: """ + str(len(all_configs_data) * 5) + """"
+echo "Total power cap settings: ${NUM_POWER_CAPS}"
+echo "Total profiling runs: $((""" + str(len(all_configs_data)) + """ * NUM_POWER_CAPS))"
 echo ""
 echo "Results organized in:"
-for PC_IDX in {1..5}; do
+for PC_IDX in $(seq 1 $NUM_POWER_CAPS); do
     echo "  - ncu_results/powercap${PC_IDX}/ (${POWER_CAPS[$((PC_IDX-1))]}W)"
 done
 echo ""
@@ -358,11 +364,12 @@ for config in all_configs_data:
     print(f"  - kernel/kernel{config['idx']}.cu")
 print(f"\nGenerated scripts:")
 print(f"  - build.sh (builds all configurations)")
-print(f"  - profile.sh (auto-detects GPU and profiles at 5 power caps)")
+print(f"  - profile.sh (auto-detects GPU and profiles at multiple power caps)")
 print(f"\nUsage:")
 print(f"  1. Build all: bash build.sh")
 print(f"  2. Profile at all power caps: bash profile.sh")
 print(f"     - Auto-detects GPU type (RTX 3090/4090, A30, V100, A100)")
-print(f"     - Profiles at 5 power cap settings per GPU")
-print(f"     - Results saved to ncu_results/powercap1/ through powercap5/")
+print(f"     - A30: Profiles at 3 power cap settings (100W, 130W, 165W)")
+print(f"     - Other GPUs: Profiles at 5 power cap settings")
+print(f"     - Results saved to ncu_results/powercap1/ through powercapN/")
 print(f"  3. Generate dataset: python generate_dataset.py")

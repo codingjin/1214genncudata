@@ -31,13 +31,13 @@ This will:
 2. Generate CUDA kernels from `allkernels.json`
 3. Build all kernel executables
 4. Profile all kernels with NCU
-5. Create `dataset.csv` with 13 metrics
+5. Create `dataset_feature.csv` with 15 features
 
 **After first run, you'll have:**
 - `kernel/` - Generated CUDA kernels
 - `build/` - Compiled executables
 - `ncu_results/` - NCU profiling results
-- `dataset.csv` - Ready for XGBoost training
+- `dataset_feature.csv` - Ready for XGBoost training
 
 ---
 
@@ -98,7 +98,7 @@ This creates NCU profiling results in `ncu_results/ncu_config_*.csv`.
 python generate_dataset.py
 ```
 
-This creates `dataset.csv` with 13 normalized metrics.
+This creates `dataset_feature.csv` with 15 normalized features.
 
 ---
 
@@ -226,7 +226,7 @@ project/
 │   ├── ncu_config_0.csv
 │   ├── ncu_config_1.csv
 │   └── ...
-└── dataset.csv                  # XGBoost-ready dataset (13 metrics)
+└── dataset_feature.csv          # XGBoost-ready dataset (15 features)
 ```
 
 ---
