@@ -62,12 +62,13 @@ def validate_gpu_setup():
     # Check 1: nvidia-smi is accessible without sudo
     try:
         result = subprocess.run(
-            ['nvidia-smi', '--query-gpu=count', '--format=csv,noheader'],
+            ['nvidia-smi', '--query-gpu=index', '--format=csv,noheader'],
             capture_output=True,
             text=True,
             check=True
         )
-        gpu_count = int(result.stdout.strip())
+        # Count number of lines (each line is one GPU)
+        gpu_count = len(result.stdout.strip().split('\n'))
         print(f"✓ nvidia-smi accessible (detected {gpu_count} GPU(s))")
     except subprocess.CalledProcessError:
         errors.append("nvidia-smi command failed. GPU drivers may not be installed.")
