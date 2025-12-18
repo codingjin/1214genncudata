@@ -168,12 +168,12 @@ def generate_dataset(output_file=OUTPUT_FILE, ncu_dir=NCU_RESULTS_DIR):
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f)
 
-        # Write header: [id, GPU, powercap(w), features...]
-        header = ["id", "GPU", "powercap(w)"] + FEATURE_COLUMNS
+        # Write header: [id, gpu, powercap(w), features...]
+        header = ["id", "gpu", "powercap(w)"] + FEATURE_COLUMNS
         writer.writerow(header)
 
         # Process each NCU file with sequential ID
-        sequential_id = 0
+        sequential_id = 1
         for config_idx, powercap_idx, filepath in ncu_files:
             # Get actual power cap wattage with bounds checking
             # (A30 has 3 settings, other GPUs have 5 settings)

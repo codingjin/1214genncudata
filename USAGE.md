@@ -253,6 +253,35 @@ sudo nvidia-smi -c 0      # Enable all GPUs
 sudo nvidia-smi -pm 0     # Disable persistent mode
 ```
 
+### "NCU requires root permissions" or profiling permission errors
+**Problem:** When running `profile.sh` or NCU commands, you get permission errors like:
+- "Profiling is not permitted"
+- "ERR_NVGPUCTRPERM - Permission issue with GPU"
+
+**Solution:** Enable NVIDIA profiling for non-root users (permanent fix, persists across reboots):
+
+```bash
+# 1. Create profiling configuration file
+sudo bash -c 'cat > /etc/modprobe.d/nvidia-profiling.conf << EOF
+# Enable NVIDIA profiling for non-root users
+options nvidia NVreg_RestrictProfilingToAdminUsers=0
+EOF'
+
+# 2. Update initramfs to apply the setting
+sudo update-initramfs -u
+
+# 3. Reboot to apply changes
+sudo reboot
+```
+
+**Verify it worked** (after reboot):
+```bash
+cat /proc/driver/nvidia/params/NVreg_RestrictProfilingToAdminUsers
+# Should output: NVreg_RestrictProfilingToAdminUsers: 0
+```
+
+After this one-time setup, NCU profiling will work without sudo permanently.
+
 ---
 
 ## Summary
